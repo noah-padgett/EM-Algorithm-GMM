@@ -1,0 +1,154 @@
+---
+title: "Reproducing Online Report of EM"
+author: "R. Noah Padgett"
+date: "2019-04-15"
+output: html_document
+---
+
+## Page Setup
+
+This file is my first attempt at reproducing the "simple" expectation-maximization algorithm described in an online post. 
+The purpose is solely for me to try to get the algorthim to work so I can try to see how to program my own version of it someday. 
+Even though others have mdone many similar things to this, I really want to understand how the technical formal math connects to how software actually utilize the algorithm. 
+So, the place I found that best and most clearly outlines the algorithm is at https://stephens999.github.io/fiveMinuteStats/intro_to_em.html.
+The post is very well laid out with clear directions.
+Most of what I will include on this page is completely copy and paste. 
+I am okay with that for this starting for. 
+In the future, I will go more on my own thinking and own programming, but this is my place to start.
+
+I'm goint to first skip all the formal (And informal) math to jump straight into the algorithm.
+
+# Example
+
+In this example, we will assume our mixture components are fully specified Gaussian distributions (i.e the means and variances are known), and we are interested in finding the maximum likelihood estimates of the $\pi_k$’s.
+
+Assume we have $K=2$ components, so that:
+\[
+X_i | Z_i = 0 \sim N(5,1.5)\\
+X_i | Z_i = 1 \sim N(10,2)
+\]
+
+
+The true mixture proportions will be $P(Z_i=0)=0.25$ and $P(Z_i=1)=0.75$. First we simulate data from this mixture model:
+
+```{r}
+## Total Sample Size
+N <- 10000
+
+## mixture components
+mu.true    <- c(5, 10) ## Mean vector
+sigma.true <- c(1.5, 2) ## SD vector
+
+## determine Z_i: class assignment
+Z <- rbinom(N, 1, 0.75)
+
+## sample from univariate mixture model
+X <- rnorm(N)*sigma.true[Z+1]+mu.true[Z+1]
+hist(X)
+
+```
+
+Now, we weite a function to compute the log-likelihood for the incomplete data, assuming the parameters are known. 
+This log-likelihood calculator will be used to determine convergence:
+
+\[
+l(\theta) = \sum_{i=1}^n\log \left(\sum_{k=1}^K\pi_k N(x_i; \mu_k, \sigma^2_k)\right)
+\]
+where $N(x_i; \mu_k, \sigma^2_k)$ is the likelihood of the $i^{th}$ observation in the $k^{th}$ class (or mixture).
+The $\pi_k$ is the class mixing weight or the class size.
+The function is written simplt as:
+
+```{r}
+
+compute.log.lik <- function(X, L, w){
+  L[,1] <- L[,1]*w[1] ## likelihood of 1st class
+  L[,2] <- L[,2]*w[2]## likelihood of 2nd class
+  ## compute sum of the log-likelihoods across classes
+  ll <- sum(log(rowSums(L)))
+  return(ll)
+}
+
+```
+
+Since the mixture components are fully specified, for each sample $X_i$ we can compute the likelihood $P(X_i|Z_i=0)$ and $P(X_i|Z_i=1)$. 
+We store these values in the columns of L:
+
+```{r}
+
+L <- matrix(NA, nrow=length(X), ncol= 2)
+L[, 1] <- dnorm(X, mean=mu.true[1], sd = sigma.true[1])
+L[, 2] <- dnorm(X, mean=mu.true[2], sd = sigma.true[2])
+
+```
+
+Finally, we implement the E and M step in the EM.iter function below. 
+The mixture.EM function is the driver which checks for convergence by computing the log-likelihoods at each step.
+
+```{r}
+
+mixture.EM <- function(w.init, L, X) {
+  ## update weights (class sizes)
+  w.curr <- w.init
+  
+  ## store log-likehoods for each iteration
+  log_liks <- c()
+  ll       <- compute.log.lik(X, L, w.curr)
+  log_liks <- c(log_liks, ll)
+  delta.ll <- 1
+  
+  ## Run the model until condition is met
+  while(delta.ll > 1e-5) {
+    ## run E + M seps based on current iteration
+    w.curr   <- EM.iter(w.curr, L)
+    ##compute next LL
+    ll       <- compute.log.lik(X, L, w.curr)
+    ## update LL stored
+    log_liks <- c(log_liks, ll) 
+    ## next, calculate the change in LL between iterations
+    delta.ll <- log_liks[length(log_liks)]  - log_liks[length(log_liks)-1]
+  }
+  return(list(w.curr, log_liks))
+}
+
+EM.iter <- function(w.curr, L, ...) {
+  
+  # E-step: compute E_{Z|X,w0}[I(Z_i = k)]
+  z_ik <- L ## posterior probabilities with respect to known mu and sigma
+  for(i in seq_len(ncol(L))) {
+    z_ik[,i] <- w.curr[i]*z_ik[,i]
+  }
+  z_ik     <- z_ik / rowSums(z_ik)
+  
+  # M-step
+  w.next   <- colSums(z_ik)/sum(z_ik)
+  return(w.next)
+}
+
+```
+
+Next, try to run the EM algorithm on this simple example. 
+
+```{r}
+
+##perform EM
+# X = observed data
+# L = likelihood of class memberships
+ee <- mixture.EM(w.init=c(0.5,0.5), L, X)
+cat("Estimate = (", round(ee[[1]][1],2), ",", round(ee[[1]][2],2), ")")
+
+```
+
+Finally, we inspect the evolution of the log-likelihood and note that it is strictly increases:
+
+```{r}
+
+plot(ee[[2]], ylab='incomplete log-likelihood', xlab='iteration')
+
+```
+
+Which perfectly (nearly) reproduces the results from the fiveminutestats page :)
+
+
+
+
+
