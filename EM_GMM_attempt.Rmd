@@ -118,14 +118,18 @@ mixture.EM <- function(X, K, max.iter = 1000) {
   return(list(t.curr, log_liks, t.array))
 }
 
-EM.iter <- function(t.curr, ...) {
-  
+EM.iter <- function(t.curr, K, ...) {
+  ## initialize the next iteration values
   t.next <- t.curr
   
   ## E-step: compute E_{Z|X,w0}[I(Z_i = k)]
   # Calc Posterior class probabilities
-  z_ik <- calc.post.prob(X, t.curr, K)
-  
+  z_ik <- matrix(nrow=length(X),ncol=K)
+  for(k in 1:K){
+     z_ik[,k] <- dnorm(X, mean=t.curr[1,k], sd = t.curr[2,k])*t.curr[3,k]
+  } ## end loop around computing log-likelihoods
+  z_ik <-  z_ik / rowSums( z_ik)
+
   ## M-Step
   # update class means estimate
   for(k in 1:K){
@@ -141,18 +145,6 @@ EM.iter <- function(t.curr, ...) {
   t.next[3,] <- colSums(z_ik)/sum(z_ik) 
   return(t.next)
 }
-
-# Calc. posterior probabilities with respect to current parameters
-calc.post.prob <- function(X, theta, K){
-  # Calculate indivial class probabilities
-  L <- matrix(nrow=length(X),ncol=K)
-  for(k in 1:K){
-    L[,k] <- dnorm(X, mean=theta[1,k], sd = theta[2,k])*theta[3,k]
-  } ## end loop around computing log-likelihoods
-  L <- L / rowSums(L)
-  
-  return(L)
-}  
 
 ```
 
