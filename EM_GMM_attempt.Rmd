@@ -53,16 +53,21 @@ The function is written as:
 ```{r}
 
 compute.log.lik <- function(X, theta, K){
-  # Calculate indivial class probabilities
+  
+  # Initialize Lto hold class likelihoods
   L <- matrix(nrow=length(X),ncol=K)
-  i <- 1 ## counter for parametes
-  for(k in 1:K){
-    L[,k] <- dnorm(X, mean=theta[1,k], sd = theta[2,k])*theta[3,k]
-  } ## end loop around computing log-likelihoods
+  ## Calculate probs
+  L <- apply(
+    theta, 2, 
+    function(x){
+      dnorm(X, mean=x[1], sd = x[2])*x[3]
+    }
+  ) ## End apply
   ## compute sum of the log-likelihoods across classes
   ll <- sum(log(rowSums(L)))
   return(ll)
 }
+
 
 ```
 
@@ -80,7 +85,8 @@ mixture.EM <- function(X, K, max.iter = 1000) {
   t.init   <- matrix(rep(c(0,1,1/K),K), ncol=K)
   # jitter start means
   t.init.j <- matrix(c(sample(X, K),  ## sample random points for means
-                abs(rnorm(K, mean = sd(X), sd = sd(X)/2)),  # use sd as center for generating random SDs for each class
+                # use sd as center for generating random SDs for each class
+                abs(rnorm(K, mean = sd(X), sd = sd(X)/2)),  
                 rep(0,K)), ## don't jitter pi
                 byrow=T, ncol=K)
   ## Combine after jitter
@@ -133,16 +139,16 @@ EM.iter <- function(t.curr, K, ...) {
   ## M-Step
   # update class means estimate
   for(k in 1:K){
+    ## Update class k mean 
     t.next[1,k] <- sum(z_ik[,k]*X)/sum(z_ik[,k])
-  } ## end loop around mean update
-  
-  # update class std estimates
-  for(k in 1:K){
+
+    ## update class k Standard Deviation
     t.next[2,k] <- sqrt(sum(z_ik[,k]*(X - t.next[1,k])**2)/sum(z_ik[,k]))
-  } ## end loop around std update
+  } ## end loop around update
   
   # update class weight estimates
   t.next[3,] <- colSums(z_ik)/sum(z_ik) 
+  
   return(t.next)
 }
 
@@ -174,10 +180,5 @@ plot(ee[[3]][1,2,],ee[[2]],  ylab='log-likelihood', xlab='mean of class 2')
 
 plot(ee[[3]][1,1,],  ylab='mean of class 1', xlab="iteration")
 ```
-
-
-
-
-
 
 
